@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(lab4)
+project(assignment1_character)
 
 find_package(OpenGL REQUIRED)
 set (CMAKE_CXX_STANDARD 11)
@@ -17,11 +17,22 @@ include_directories(
 	assignment1/
 )
 
-add_executable(lab4_character
-	assignment1/lab4_character.cpp
+add_executable(assignment1_character
+	assignment1/assignment1_character.cpp
 	assignment1/render/shader.cpp
 )
-target_link_libraries(lab4_character
+add_executable(main
+	assignment1/main.cpp
+	assignment1/render/shader.cpp
+)
+
+target_link_libraries(assignment1_character
+	${OPENGL_LIBRARY}
+	glfw
+	glad
+)
+
+target_link_libraries(main
 	${OPENGL_LIBRARY}
 	glfw
 	glad
