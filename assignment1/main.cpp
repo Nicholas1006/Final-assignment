@@ -596,6 +596,43 @@ struct MyBot {
 		const auto& animationObject = animationObjects[0];
 		updateAnimation(model, anim, animationObject, time, nodeTransforms);
 		
+		// MAKE THE BOT WALK STRAIGHT INSTEAD OF IN A CIRCLE
+		// Find the root joint (hip bone) - usually the first joint
+		if (!model.skins.empty()) {
+			const tinygltf::Skin& skin = model.skins[0];
+			if (!skin.joints.empty()) {
+				int rootJointIndex = skin.joints[0];  // Root joint is usually the first in the skin
+				
+				// Extract the current root transform
+				glm::mat4 rootTransform = nodeTransforms[rootJointIndex];
+				
+				// Extract translation from root transform
+				glm::vec3 translation = glm::vec3(rootTransform[3]);
+				
+				// Calculate forward distance (Z-axis) from the circular motion
+				// Assuming the circular motion has components in both X and Z
+				// We'll take the magnitude of the XZ vector as the forward speed
+				float forwardDistance = glm::length(glm::vec2(translation.x, translation.z));
+				
+				// Create new translation - only forward (Z-axis), no lateral movement (X-axis)
+				// Keep the original Y (vertical) movement
+				glm::vec3 straightTranslation(0.0f, translation.y, forwardDistance);
+				
+				// Remove any rotation from the root to keep it facing forward
+				// Extract scale if any
+				glm::vec3 scale = glm::vec3(
+					glm::length(glm::vec3(rootTransform[0])),
+					glm::length(glm::vec3(rootTransform[1])),
+					glm::length(glm::vec3(rootTransform[2]))
+				);
+				
+				// Reconstruct root transform with only forward translation and scale
+				// No rotation to keep it facing forward
+				nodeTransforms[rootJointIndex] = glm::translate(glm::mat4(1.0f), straightTranslation) * 
+												glm::scale(glm::mat4(1.0f), scale);
+			}
+		}
+		
 		// Compute global transforms for all nodes
 		std::vector<glm::mat4> globalNodeTransforms(model.nodes.size(), glm::mat4(1.0f));
 		
@@ -855,6 +892,8 @@ struct MyBot {
 		glDeleteProgram(programID);
 	}
 };
+
+
 // ====================
 // SIMPLE GROUND
 // ====================
