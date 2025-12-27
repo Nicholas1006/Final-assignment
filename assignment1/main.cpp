@@ -39,16 +39,18 @@ static bool firstMouse = true;
 static float lastX = windowWidth / 2.0f;
 static float lastY = windowHeight / 2.0f;
 
-// Camera
-static glm::vec3 cameraPos = glm::vec3(0.0f, 100.0f, 500.0f);  // Increased height and distance
-static glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-static glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-static float cameraSpeed = 500.0f;
-static float yaw = -90.0f;
-static float pitch = -10.0f;  // Looking slightly down
-static float FoV = 45.0f;
-static float zNear = 0.1f;
-static float zFar = 5000.0f;
+// Third-person camera settings
+static float cameraDistance = 300.0f;  // Distance behind the bot
+static float cameraHeight = 100.0f;    // Height above the bot
+static float minCameraDistance = 100.0f;
+static float maxCameraDistance = 500.0f;
+static float cameraAngleX = 0.0f;      // Horizontal angle (controlled by mouse X)
+static float cameraAngleY = 20.0f;     // Vertical angle (looking down at bot)
+
+// Bot position and rotation
+static glm::vec3 botPosition = glm::vec3(0.0f, 0.0f, 0.0f);
+static float botYaw = 0.0f;  // Bot rotation in radians
+static float botPitch = 0.0f; // Bot pitch (for looking up/down, limited)
 
 // Lighting
 static glm::vec3 lightIntensity(5e6f, 5e6f, 5e6f);
@@ -56,7 +58,12 @@ static glm::vec3 lightPosition(0.0f, 500.0f, 0.0f);
 
 // Animation
 static bool playAnimation = true;
-static float playbackSpeed = 1.0f;
+static bool reverseAnimation = false;
+static float playbackSpeed = 5.0f;
+
+// Camera control flags
+static bool cameraFollowBot = true;  // Toggle for camera following bot
+
 // ====================
 // FUNCTION DECLARATIONS
 // ====================
@@ -64,7 +71,7 @@ static void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode);
 void processInput(GLFWwindow* window, float deltaTime);
-
+void updateCameraPosition();
 
 void checkGLError(const char* context) {
     GLenum error = glGetError();
@@ -243,6 +250,50 @@ struct TestCube {
     }
 };
 
+// Function to update camera position based on bot position and camera angles
+void updateCameraPosition() {
+    // Calculate camera offset from bot
+    float horizontalDistance = cameraDistance * cos(glm::radians(cameraAngleY));
+    float verticalDistance = cameraDistance * sin(glm::radians(cameraAngleY));
+    
+    // Calculate camera position BEHIND the bot (negative offset)
+    // Use bot's yaw to position camera behind the bot
+    float offsetX = -horizontalDistance * sin(botYaw);  // Changed from sin(glm::radians(cameraAngleX))
+    float offsetZ = -horizontalDistance * cos(botYaw);  // Changed from cos(glm::radians(cameraAngleX))
+    
+    // Update bot's yaw to match camera horizontal rotation
+    botYaw = glm::radians(cameraAngleX);  // Removed the +180.0f
+    
+    // Keep yaw in 0-2π range
+    while (botYaw > 2 * 3.14159265359f) botYaw -= 2 * 3.14159265359f;
+    while (botYaw < 0) botYaw += 2 * 3.14159265359f;
+}
+
+// Function to get camera view matrix for third-person view
+glm::mat4 getThirdPersonViewMatrix() {
+    // Calculate camera position
+    float horizontalDistance = cameraDistance * cos(glm::radians(cameraAngleY));
+    float verticalDistance = cameraDistance * sin(glm::radians(cameraAngleY));
+    
+    // Position camera BEHIND the bot using bot's yaw
+    float cameraPosX = botPosition.x - horizontalDistance * sin(botYaw);  // Changed
+    float cameraPosY = botPosition.y + cameraHeight + verticalDistance;
+    float cameraPosZ = botPosition.z - horizontalDistance * cos(botYaw);  // Changed
+    
+    glm::vec3 cameraPos(cameraPosX, cameraPosY, cameraPosZ);
+    
+    // Look at a point slightly in front of the bot (so we see the back)
+    float lookAheadDistance = 100.0f;
+    glm::vec3 cameraTarget(
+        botPosition.x + lookAheadDistance * sin(botYaw),  // Look ahead in bot's direction
+        botPosition.y + 50.0f,
+        botPosition.z + lookAheadDistance * cos(botYaw)
+    );
+    
+    glm::vec3 cameraUp(0.0f, 1.0f, 0.0f);
+    
+    return glm::lookAt(cameraPos, cameraTarget, cameraUp);
+}
 
 struct MyBot {
 	// Shader variable IDs
@@ -256,6 +307,8 @@ struct MyBot {
     
     // Bot transformation
     float currentYaw;  // Horizontal rotation in radians
+    float visualAdditionalYaw;
+    float currentPitch; // Vertical rotation in radians (limited)
     glm::vec3 position; // Position in world space
     glm::vec3 modelCenterOffset; // Offset to move the bot's visual center to its logical position
 
@@ -498,7 +551,7 @@ struct MyBot {
 
 			// Calculate current animation time (wrap if necessary)
 			const std::vector<float> &times = animationObject.samplers[channel.sampler].input;
-			float animationTime = fmod(time, times.back());
+			float animationTime = fmod(fmod(time, times.back()) + times.back(), times.back());
 			
 			int keyframeIndex = findKeyframeIndex(times, animationTime);
 			int nextKeyframeIndex = keyframeIndex + 1;
@@ -648,6 +701,10 @@ struct MyBot {
 		
 		// Update skinning with global transforms
 		updateSkinning(globalNodeTransforms);
+		
+		// Update bot position from global variables
+		position = botPosition;
+		currentYaw = botYaw;
 	}
 
 	// Function to rotate the bot horizontally
@@ -665,6 +722,10 @@ struct MyBot {
 		while (currentYaw > 2 * 3.14159265359f) currentYaw -= 2 * 3.14159265359f;
 		while (currentYaw < 0) currentYaw += 2 * 3.14159265359f;
 	}
+
+    void setfaceDirection(float angleRadians) {
+        visualAdditionalYaw = angleRadians;
+    }
 	
 	// Function to get the bot's forward direction (based on current yaw)
 	glm::vec3 getForwardDirection() const {
@@ -689,17 +750,20 @@ struct MyBot {
 	void moveForward(float distance) {
 		glm::vec3 forward = getForwardDirection();
 		position += forward * distance;
+		botPosition = position; // Update global bot position
 	}
 	
 	// Function to move the bot sideways (strafe)
 	void moveRight(float distance) {
 		glm::vec3 right = getRightDirection();
 		position += right * distance;
+		botPosition = position; // Update global bot position
 	}
 	
 	// Function to set the bot's position
 	void setPosition(const glm::vec3& newPosition) {
 		position = newPosition;
+		botPosition = position; // Update global bot position
 	}
 	
 	// Function to get the bot's current position
@@ -741,7 +805,9 @@ struct MyBot {
 		
 		// Initialize bot transformation
 		currentYaw = 0.0f;
+		currentPitch = 0.0f;
 		position = glm::vec3(0.0f, 0.0f, 0.0f);
+		botPosition = position; // Sync with global
 		
 		// Adjust this offset based on your bot model
 		// This moves the visual center to where the logical center should be
@@ -785,6 +851,9 @@ struct MyBot {
 									parentTransform, initialGlobalTransforms);
 		}
 		updateSkinning(initialGlobalTransforms);
+		
+		// Initialize camera position based on bot
+		updateCameraPosition();
 	}
 
 	void bindMesh(std::vector<PrimitiveObject> &primitiveObjects,
@@ -940,7 +1009,7 @@ struct MyBot {
 		// 2. Apply yaw rotation around the bot's center
 		// 3. Apply offset to move visual center to logical center
 		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), position) * 
-							   glm::rotate(glm::mat4(1.0f), currentYaw, glm::vec3(0.0f, 1.0f, 0.0f)) *
+							   glm::rotate(glm::mat4(1.0f), currentYaw+visualAdditionalYaw, glm::vec3(0.0f, 1.0f, 0.0f)) *
 							   glm::translate(glm::mat4(1.0f), modelCenterOffset);
 		
 		// Apply the bot's model matrix to the camera matrix
@@ -1256,7 +1325,7 @@ int main(void) {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    window = glfwCreateWindow(windowWidth, windowHeight, "Debug Test - Simple Scene", NULL, NULL);
+    window = glfwCreateWindow(windowWidth, windowHeight, "Third-Person Bot View", NULL, NULL);
     if (window == NULL) {
         std::cerr << "Failed to open a GLFW window." << std::endl;
         glfwTerminate();
@@ -1289,19 +1358,13 @@ int main(void) {
     TestCube testCube;
     SimpleGround ground;
     
-    std::cout << "=== Initializing Test Scene ===" << std::endl;
+    std::cout << "=== Initializing Third-Person View ===" << std::endl;
     testCube.initialize();
     ground.initialize();
     bot.initialize();
-
-
     
-    // Update camera front based on initial pitch/yaw
-    glm::vec3 front;
-    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front.y = sin(glm::radians(pitch));
-    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraFront = glm::normalize(front);
+    // Update camera front based on initial camera angles
+    updateCameraPosition();
 
     // Set up callbacks AFTER window creation
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -1316,12 +1379,13 @@ int main(void) {
     unsigned long frames = 0;
 
     std::cout << "\n=== Starting Render Loop ===" << std::endl;
-    std::cout << "Camera position: (" << cameraPos.x << ", " << cameraPos.y << ", " << cameraPos.z << ")" << std::endl;
+    std::cout << "Bot position: (" << botPosition.x << ", " << botPosition.y << ", " << botPosition.z << ")" << std::endl;
     std::cout << "Controls:" << std::endl;
-    std::cout << "  - WASD: Move camera" << std::endl;
-    std::cout << "  - Mouse: Look around" << std::endl;
-    std::cout << "  - Scroll: Zoom in/out" << std::endl;
-    std::cout << "  - R: Reset camera" << std::endl;
+    std::cout << "  - WASD: Move bot" << std::endl;
+    std::cout << "  - Mouse: Rotate bot and camera view" << std::endl;
+    std::cout << "  - Scroll: Zoom camera in/out" << std::endl;
+    std::cout << "  - R: Reset bot and camera" << std::endl;
+    std::cout << "  - C: Toggle camera follow (third-person/free)" << std::endl;
     std::cout << "  - 1: Toggle test cube" << std::endl;
     std::cout << "  - 3: Toggle ground" << std::endl;
     std::cout << "  - ESC: Exit" << std::endl << std::endl;
@@ -1339,15 +1403,20 @@ int main(void) {
         processInput(window, deltaTime);
 
         if (playAnimation) {
-			time += deltaTime * playbackSpeed;
-			bot.update(time);
-		}
+            if(reverseAnimation)
+                time -= deltaTime * playbackSpeed;
+            else
+    			time += deltaTime * playbackSpeed;
+            }
+        bot.update(time);
 
         // Camera matrices
-        glm::mat4 projection = glm::perspective(glm::radians(FoV), 
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), 
                                                (float)windowWidth / windowHeight, 
-                                               zNear, zFar);
-        glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+                                               0.1f, 5000.0f);
+        
+        // Use third-person view matrix
+        glm::mat4 view = getThirdPersonViewMatrix();
         glm::mat4 viewProj = projection * view;
 
         // Render test objects
@@ -1364,9 +1433,11 @@ int main(void) {
             
             std::stringstream stream;
             stream << std::fixed << std::setprecision(1) 
-                   << "Debug Test | FPS: " << fps 
-                   << " | Pos: (" << (int)cameraPos.x << ", " << (int)cameraPos.y << ", " << (int)cameraPos.z << ")"
-                   << " | Cube: " << (renderRobot ? "ON" : "OFF")
+                   << "Third-Person Bot View | FPS: " << fps 
+                   << " | Bot Pos: (" << (int)botPosition.x << ", " << (int)botPosition.y << ", " << (int)botPosition.z << ")"
+                   << " | Yaw: " << glm::degrees(botYaw)
+                   << " | Pitch: " << cameraAngleY
+                   << " | Camera: " << (cameraFollowBot ? "Follow" : "Free")
                    << " | Ground: " << (renderGround ? "ON" : "OFF");
             glfwSetWindowTitle(window, stream.str().c_str());
         }
@@ -1390,49 +1461,93 @@ int main(void) {
 // INPUT PROCESSING
 // ====================
 void processInput(GLFWwindow* window, float deltaTime) {
-    // Movement
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
-        cameraPos += cameraSpeed * deltaTime * cameraFront;
-    }
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
-        cameraPos -= cameraSpeed * deltaTime * cameraFront;
-    }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
-        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed * deltaTime;
-    }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
-        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed * deltaTime;
-    }
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS){
-        bot.moveForward(cameraSpeed * deltaTime);
-    }
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS){
-        bot.moveForward(-cameraSpeed * deltaTime);
-    }
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS){
-        bot.rotateYaw(-0.5f * deltaTime); // Rotate bot left
-    }
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS){
-        bot.rotateYaw(0.5f * deltaTime); // Rotate bot right
-    }
-    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-        cameraPos.y -= cameraSpeed * deltaTime;
-    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-        cameraPos.y += cameraSpeed * deltaTime;
+    float moveSpeed = 200.0f * deltaTime;
     
-    // Reset camera
+    // Bot movement (WASD)
+    glm::vec3 forward = glm::vec3(sin(botYaw), 0.0f, cos(botYaw));
+    glm::vec3 right = glm::vec3(-cos(botYaw), 0.0f, sin(botYaw));  // Negated
+    
+    playAnimation = false;
+    bool pressedW = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+    bool pressedA = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+    bool pressedS = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+    bool pressedD = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+
+
+    if (pressedW && !pressedS){
+        playAnimation = true;
+        botPosition += forward * moveSpeed;
+        if(pressedA && !pressedD){
+            bot.setfaceDirection(M_PI/4);
+            botPosition -= right * moveSpeed;
+        }
+        else if(pressedD && !pressedA){
+            bot.setfaceDirection(-M_PI/4);
+            botPosition += right * moveSpeed;
+        }
+        else{
+            bot.setfaceDirection(0);
+        }
+    }
+    else if (pressedS && !pressedW){
+        playAnimation = true;
+        botPosition -= forward * moveSpeed;
+        if(pressedA && !pressedD){
+            bot.setfaceDirection(3*M_PI/4);
+            botPosition -= right * moveSpeed;
+        }
+        else if(pressedD && !pressedA){
+            bot.setfaceDirection(-3*M_PI/4);
+            botPosition += right * moveSpeed;
+        }
+        else{
+            bot.setfaceDirection(M_PI);
+        }
+    }
+    else if (pressedA && !pressedD){
+        playAnimation = true;
+        botPosition -= right * moveSpeed;
+        bot.setfaceDirection(M_PI/2);
+    }
+    else if (pressedD && !pressedA){
+        playAnimation = true;
+        botPosition += right * moveSpeed;
+        bot.setfaceDirection(-M_PI/2);
+    }
+    bot.setPosition(botPosition);
+    
+    
+    // Keep bot grounded
+    botPosition.y = -32.0f;
+    
+    // Reset bot and camera
+    static bool keyRPressed = false;
     if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-        cameraPos = glm::vec3(0.0f, 100.0f, 500.0f);
-        yaw = -90.0f;
-        pitch = -10.0f;
-        
-        glm::vec3 front;
-        front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-        front.y = sin(glm::radians(pitch));
-        front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-        cameraFront = glm::normalize(front);
-        
-        std::cout << "Camera reset to: (" << cameraPos.x << ", " << cameraPos.y << ", " << cameraPos.z << ")" << std::endl;
+        if (!keyRPressed) {
+            botPosition = glm::vec3(0.0f, 0.0f, 0.0f);
+            botYaw = 0.0f;
+            cameraAngleX = 0.0f;
+            cameraAngleY = 20.0f;
+            cameraDistance = 300.0f;
+            bot.setPosition(botPosition);
+            bot.setYaw(botYaw);
+            std::cout << "Bot and camera reset to origin." << std::endl;
+            keyRPressed = true;
+        }
+    } else {
+        keyRPressed = false;
+    }
+    
+    // Toggle camera follow
+    static bool keyCPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
+        if (!keyCPressed) {
+            cameraFollowBot = !cameraFollowBot;
+            std::cout << "Camera follow: " << (cameraFollowBot ? "ON (third-person)" : "OFF (free)") << std::endl;
+            keyCPressed = true;
+        }
+    } else {
+        keyCPressed = false;
     }
     
     // Toggle test cube (using key 1)
@@ -1468,8 +1583,8 @@ static void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
         firstMouse = false;
     }
 
-    float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos;
+    float xoffset = lastX - xpos;
+    float yoffset = ypos - lastY;
     lastX = xpos;
     lastY = ypos;
 
@@ -1477,28 +1592,34 @@ static void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
-    yaw += xoffset;
-    pitch += yoffset;
+    // Update camera angles based on mouse movement
+    cameraAngleX += xoffset;
+    cameraAngleY += yoffset;
 
-    // Constrain pitch
-    if (pitch > 89.0f)
-        pitch = 89.0f;
-    if (pitch < -89.0f)
-        pitch = -89.0f;
-
-    glm::vec3 front;
-    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-    front.y = sin(glm::radians(pitch));
-    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-    cameraFront = glm::normalize(front);
+    // Constrain vertical angle to prevent camera flipping
+    if (cameraAngleY > 89.0f)
+        cameraAngleY = 89.0f;
+    if (cameraAngleY < -10.0f)
+        cameraAngleY = -10.0f;
+    
+    // Update bot's yaw to match camera horizontal rotation
+    botYaw = glm::radians(cameraAngleX);  // Removed the +180.0f
+    
+    // Keep yaw in 0-2π range
+    while (botYaw > 2 * 3.14159265359f) botYaw -= 2 * 3.14159265359f;
+    while (botYaw < 0) botYaw += 2 * 3.14159265359f;
+    
+    bot.setYaw(botYaw);
 }
 
 static void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
-    FoV -= (float)yoffset;
-    if (FoV < 1.0f)
-        FoV = 1.0f;
-    if (FoV > 90.0f)
-        FoV = 90.0f;
+    cameraDistance -= (float)yoffset * 10.0f; // Adjust zoom speed
+    
+    // Clamp camera distance
+    if (cameraDistance < minCameraDistance)
+        cameraDistance = minCameraDistance;
+    if (cameraDistance > maxCameraDistance)
+        cameraDistance = maxCameraDistance;
 }
 
 static void key_callback(GLFWwindow *window, int key, int scancode, int action, int mode) {
