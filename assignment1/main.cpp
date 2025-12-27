@@ -59,7 +59,7 @@ static glm::vec3 lightPosition(0.0f, 500.0f, 0.0f);
 // Animation
 static bool playAnimation = true;
 static bool reverseAnimation = false;
-static float playbackSpeed = 5.0f;
+static float playbackSpeed = 1.0f;
 
 // Camera control flags
 static bool cameraFollowBot = true;  // Toggle for camera following bot
@@ -1461,7 +1461,15 @@ int main(void) {
 // INPUT PROCESSING
 // ====================
 void processInput(GLFWwindow* window, float deltaTime) {
-    float moveSpeed = 200.0f * deltaTime;
+    float moveSpeed;
+    if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS){
+        playbackSpeed = 5.0f;
+        moveSpeed = 200.0f * deltaTime;
+    }
+    else{
+        playbackSpeed = 2.0f;
+        moveSpeed = 80.0f * deltaTime;
+    }
     
     // Bot movement (WASD)
     glm::vec3 forward = glm::vec3(sin(botYaw), 0.0f, cos(botYaw));
@@ -1520,6 +1528,9 @@ void processInput(GLFWwindow* window, float deltaTime) {
     // Keep bot grounded
     botPosition.y = -32.0f;
     
+    
+
+
     // Reset bot and camera
     static bool keyRPressed = false;
     if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
