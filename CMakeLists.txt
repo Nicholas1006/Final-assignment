@@ -14,6 +14,7 @@ include_directories(
 	external/glm-0.9.7.1/
 	external/glad-opengl-3.3/include/
 	external/tinygltf-2.9.3/
+	external/
 	assignment1/
 )
 
