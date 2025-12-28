@@ -112,6 +112,17 @@ int abs(int x) {
 	}
 }
 
+float roundToNearest(float x, float y){
+    float multiplier = floor(x/y); 
+    float remainder = fmod(x,y);
+    if(remainder < y/2){
+        return(multiplier * y);
+    }
+    else{
+        return((multiplier + 1) * y);
+    }
+}
+
 
 float normalizeAngle(float angle) {
     while (angle > M_PI) angle -= 2 * M_PI;
@@ -1114,25 +1125,33 @@ struct SimpleGround {
     GLuint textureID;
     GLuint mvpMatrixID;
     GLuint textureSamplerID;
+    glm::vec3 groundCenter;
+    float textureSize;
+    float textureTileAmount;
     
     void initialize() {
+        textureSize = 500.0f;
+        textureTileAmount = 5.0f;
+
         std::cout << "Initializing textured ground..." << std::endl;
         
         // Ground vertices (two triangles forming a quad)
+        float gridSize = textureSize/2 * textureTileAmount;
         float vertices[] = {
             // positions
-            -1000.0f, 0.0f, -1000.0f,
-             1000.0f, 0.0f, -1000.0f,
-             1000.0f, 0.0f,  1000.0f,
-            -1000.0f, 0.0f,  1000.0f
+            -gridSize, 0.0f, -gridSize,
+             gridSize, 0.0f, -gridSize,
+             gridSize, 0.0f,  gridSize,
+            -gridSize, 0.0f,  gridSize
         };
+        groundCenter = glm::vec3(0.0f, 0.0f, 0.0f);
         
         // Texture coordinates (with tiling)
         float uvCoords[] = {
             0.0f, 0.0f,
-            20.0f, 0.0f,  // Tiled 20 times
-            20.0f, 20.0f,
-            0.0f, 20.0f
+            textureTileAmount, 0.0f,  // Tiled 20 times
+            textureTileAmount, textureTileAmount,
+            0.0f, textureTileAmount
         };
         
         // Indices for two triangles
@@ -1318,6 +1337,13 @@ struct SimpleGround {
         std::cout << "Created procedural grass texture." << std::endl;
     }
     
+
+    void update(const glm::vec3& botPosition) {
+        groundCenter.x = roundToNearest(botPosition.x, textureSize);
+        groundCenter.z = roundToNearest(botPosition.z, textureSize);
+    }
+
+
     void render(const glm::mat4& viewProj) {
         if (!renderGround) return;
         
@@ -1325,7 +1351,8 @@ struct SimpleGround {
         glBindVertexArray(vao);
         
         // Set MVP matrix
-        glm::mat4 mvp = viewProj; // Identity model matrix
+        glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), groundCenter);
+        glm::mat4 mvp = viewProj * modelMatrix;
         glUniformMatrix4fv(mvpMatrixID, 1, GL_FALSE, glm::value_ptr(mvp));
         
         // Bind texture
@@ -1738,6 +1765,7 @@ int main(void) {
     			time += deltaTime * playbackSpeed;
             }
         bot.update(time);
+        ground.update(bot.getPosition());
 
         // Camera matrices
         glm::mat4 projection = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
