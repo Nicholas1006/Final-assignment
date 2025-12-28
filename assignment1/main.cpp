@@ -1131,7 +1131,7 @@ struct SimpleGround {
     
     void initialize() {
         textureSize = 500.0f;
-        textureTileAmount = 5.0f;
+        textureTileAmount = 25.0f;
 
         std::cout << "Initializing textured ground..." << std::endl;
         
