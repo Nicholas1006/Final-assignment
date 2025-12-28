@@ -1849,7 +1849,7 @@ int main(void) {
     std::cout << "  - 1: Toggle test cube" << std::endl;
     std::cout << "  - 3: Toggle ground" << std::endl;
     std::cout << "  - ESC: Exit" << std::endl << std::endl;
-
+    float lastFlowerGrowth = 0.0f;
     // Main loop
     do {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1871,7 +1871,11 @@ int main(void) {
         bot.update(deltaTime,time);
         ground.update(bot.getPosition());
         skybox.update(bot.getPosition());
-        flowers.update(deltaTime, bot.getPosition());
+        if(currentTime - lastFlowerGrowth > 0.1f/30.0f)
+        {
+            flowers.update(currentTime - lastFlowerGrowth, bot.getPosition());
+            lastFlowerGrowth = currentTime;
+        }
 
         // Camera matrices
         glm::mat4 projection = glm::perspective(glm::radians(FoV), 4.0f / 3.0f, zNear, zFar);
