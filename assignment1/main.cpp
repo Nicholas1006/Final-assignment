@@ -362,7 +362,7 @@ glm::mat4 getThirdPersonViewMatrix() {
 struct InstancedFlowers {
     GLuint vao, vbo, ebo;
     GLuint instanceVBO;
-    GLuint shader;
+    GLuint programID;
     GLuint texture;
     
     struct FlowerInstance {
@@ -450,88 +450,12 @@ struct InstancedFlowers {
         glBindVertexArray(0);
         
         // Create shader for instanced flowers
-        const char* vertexShader = R"(
-        #version 330 core
-        layout(location = 0) in vec3 aPos;
-        layout(location = 1) in vec2 aTexCoord;
-        layout(location = 2) in vec3 aInstancePos;
-        layout(location = 3) in float aGrowth;
-        
-        out vec2 TexCoord;
-        out float Growth;
-        
-        uniform mat4 VP;
-        uniform vec3 cameraPos;
-        
-        void main() {
-            Growth = aGrowth;
-            
-            // SPHERICAL BILLBOARDING - Always face camera
-            vec3 pos = aInstancePos;
-            
-            // Calculate look direction from flower to camera
-            vec3 look = normalize(cameraPos - aInstancePos);
-            vec3 up = vec3(0.0, 1.0, 0.0);
-            
-            // Calculate right vector (perpendicular to look and world up)
-            vec3 right = normalize(cross(up, look));
-            
-            // Recalculate up vector to be perpendicular to look and right
-            vec3 billboardUp = normalize(cross(look, right));
-            
-            // Apply the billboard transformation
-            // The quad's X axis uses right vector, Y axis uses billboardUp
-            pos += right * aPos.x * aGrowth * 5.0;
-            pos += billboardUp * aPos.y * aGrowth * 5.0;
-            
-            gl_Position = VP * vec4(pos, 1.0);
-            TexCoord = aTexCoord;
+        // Create shader for instanced flowers - LOAD FROM FILE
+        programID = LoadShadersFromFile("../assignment1/shader/flower.vert", "../assignment1/shader/flower.frag");
+        if (programID == 0) {
+            std::cerr << "Failed to load flower shaders." << std::endl;
+            return;
         }
-    )";
-        
-        const char* fragmentShader = R"(
-            #version 330 core
-            in vec2 TexCoord;
-            in float Growth;
-            out vec4 FragColor;
-            
-            uniform sampler2D flowerTexture;
-            
-            void main() {
-                vec4 texColor = texture(flowerTexture, TexCoord);
-                
-                // ALPHA TESTING - discard completely transparent fragments
-                if (texColor.a < 0.1)
-                    discard;
-                    
-                // Simple growth fade
-                float alpha = texColor.a * Growth;
-                
-                // Discard if too transparent (helps with depth issues)
-                if (alpha < 0.3)
-                    discard;
-                
-                // Color based on growth
-                FragColor = vec4(texColor.rgb * (0.8 + 0.2 * Growth), alpha);
-            }
-        )";
-        
-        // Compile shader
-        GLuint vertShader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertShader, 1, &vertexShader, NULL);
-        glCompileShader(vertShader);
-        
-        GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragShader, 1, &fragmentShader, NULL);
-        glCompileShader(fragShader);
-        
-        shader = glCreateProgram();
-        glAttachShader(shader, vertShader);
-        glAttachShader(shader, fragShader);
-        glLinkProgram(shader);
-        
-        glDeleteShader(vertShader);
-        glDeleteShader(fragShader);
         
         // Load flower texture
         texture = loadFlowerTexture();
@@ -627,18 +551,18 @@ struct InstancedFlowers {
     }
     
     void render(const glm::mat4& viewProj, const glm::vec3& cameraPos) {
-        glUseProgram(shader);
+        glUseProgram(programID);
         
         // Set uniforms
-        glUniformMatrix4fv(glGetUniformLocation(shader, "VP"), 1, 
+        glUniformMatrix4fv(glGetUniformLocation(programID, "VP"), 1, 
                         GL_FALSE, glm::value_ptr(viewProj));
-        glUniform3fv(glGetUniformLocation(shader, "cameraPos"), 1, 
+        glUniform3fv(glGetUniformLocation(programID, "cameraPos"), 1, 
                     glm::value_ptr(cameraPos));
         
         // Bind texture
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
-        glUniform1i(glGetUniformLocation(shader, "flowerTexture"), 0);
+        glUniform1i(glGetUniformLocation(programID, "flowerTexture"), 0);
         
         // NO BLENDING NEEDED - we're using alpha testing
         // Just enable depth testing
@@ -657,7 +581,7 @@ struct InstancedFlowers {
         glDeleteBuffers(1, &ebo);
         glDeleteBuffers(1, &instanceVBO);
         glDeleteTextures(1, &texture);
-        glDeleteProgram(shader);
+        glDeleteProgram(programID);
     }
 };
 
@@ -1438,7 +1362,7 @@ static MyBot bot;
 // ====================
 struct SimpleGround {
     GLuint vao, vbo, uvVbo, ebo;
-    GLuint shader;
+    GLuint programID;
     GLuint textureID;
     GLuint mvpMatrixID;
     GLuint textureSamplerID;
@@ -1502,82 +1426,23 @@ struct SimpleGround {
         
         glBindVertexArray(0);
         
-        // Create shader for textured ground
-        const char* groundVert = R"(
-            #version 330 core
-            layout(location = 0) in vec3 aPos;
-            layout(location = 1) in vec2 aTexCoord;
-            
-            out vec2 TexCoord;
-            uniform mat4 MVP;
-            
-            void main() {
-                gl_Position = MVP * vec4(aPos, 1.0);
-                TexCoord = aTexCoord;
-            }
-        )";
+        // Load shaders from external files
+        programID = LoadShadersFromFile("../assignment1/shader/ground.vert", "../assignment1/shader/ground.frag");
         
-        const char* groundFrag = R"(
-            #version 330 core
-            in vec2 TexCoord;
-            out vec3 FragColor;
-            
-            uniform sampler2D groundTexture;
-            
-            void main() {
-                FragColor = texture(groundTexture, TexCoord).rgb;
-                // Add some variation to make it look more natural
-                FragColor *= vec3(0.8, 1.0, 0.8); // Slightly greener tint
-            }
-        )";
-        
-        // Compile shaders
-        GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertexShader, 1, &groundVert, NULL);
-        glCompileShader(vertexShader);
-        
-        GLint success;
-        char infoLog[512];
-        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-            std::cout << "Ground Vertex shader compilation failed: " << infoLog << std::endl;
+        if (programID == 0) {
+            std::cerr << "Failed to load ground shaders!" << std::endl;
+            return;
         }
-        
-        GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragmentShader, 1, &groundFrag, NULL);
-        glCompileShader(fragmentShader);
-        
-        glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-            std::cout << "Ground Fragment shader compilation failed: " << infoLog << std::endl;
-        }
-        
-        // Link shader program
-        shader = glCreateProgram();
-        glAttachShader(shader, vertexShader);
-        glAttachShader(shader, fragmentShader);
-        glLinkProgram(shader);
-        
-        glGetProgramiv(shader, GL_LINK_STATUS, &success);
-        if (!success) {
-            glGetProgramInfoLog(shader, 512, NULL, infoLog);
-            std::cout << "Ground Shader program linking failed: " << infoLog << std::endl;
-        }
-        
-        glDeleteShader(vertexShader);
-        glDeleteShader(fragmentShader);
         
         // Get uniform locations
-        mvpMatrixID = glGetUniformLocation(shader, "MVP");
-        textureSamplerID = glGetUniformLocation(shader, "groundTexture");
+        mvpMatrixID = glGetUniformLocation(programID, "MVP");
+        textureSamplerID = glGetUniformLocation(programID, "groundTexture");
         
         // Load ground texture
         textureID = loadGroundTexture();
         
-        std::cout << "Textured ground initialized. Shader ID: " << shader 
-                  << ", Texture ID: " << textureID << std::endl;
+        std::cout << "Textured ground initialized. Shader ID: " << programID 
+                << ", Texture ID: " << textureID << std::endl;
     }
     
     GLuint loadGroundTexture() {
@@ -1664,7 +1529,7 @@ struct SimpleGround {
     void render(const glm::mat4& viewProj) {
         if (!renderGround) return;
         
-        glUseProgram(shader);
+        glUseProgram(programID);
         glBindVertexArray(vao);
         
         // Set MVP matrix
@@ -1689,7 +1554,7 @@ struct SimpleGround {
         glDeleteBuffers(1, &uvVbo);
         glDeleteBuffers(1, &ebo);
         glDeleteTextures(1, &textureID);
-        glDeleteProgram(shader);
+        glDeleteProgram(programID);
     }
 };
 struct SkyBox {

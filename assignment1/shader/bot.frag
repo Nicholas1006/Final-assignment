@@ -20,8 +20,8 @@ void main() {
     // Diffuse lighting
     float diffuse = max(dot(N, L), 0.0);
     
-    // Calculate color (you can add texture sampling here)
-    vec3 materialColor = vec3(0.8, 0.8, 0.8); // Gray material
+    // Calculate color
+    vec3 materialColor = vec3(0.8, 0.8, 0.8);
     vec3 finalColor = materialColor * lightIntensity * diffuse;
     
     // Gamma correction

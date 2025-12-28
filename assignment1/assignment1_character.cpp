@@ -100,7 +100,6 @@ struct MyBot {
 		}
 		if (node.rotation.size() == 4) {
 			glm::quat q(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]);
-			//transform *= glm::mat4_cast(q);
 		}
 		if (node.scale.size() == 3) {
 			transform = glm::scale(transform, glm::vec3(node.scale[0], node.scale[1], node.scale[2]));
@@ -387,20 +386,14 @@ void computeLocalNodeTransform(const tinygltf::Model& model,
 		}
 	}
 
-	// Add these helper functions in your MyBot class
 	float getYawFromMatrix(const glm::mat4& transform) {
-		// Extract yaw (rotation around Y axis) from transformation matrix
 		return atan2(transform[0][2], transform[0][0]);
 	}
 
 	glm::mat4 removeYawRotation(const glm::mat4& transform) {
-		// Extract yaw
 		float yaw = getYawFromMatrix(transform);
 		
-		// Create inverse yaw rotation
 		glm::mat4 inverseYaw = glm::rotate(glm::mat4(1.0f), -yaw, glm::vec3(0.0f, 1.0f, 0.0f));
-		
-		// Apply inverse rotation to remove yaw
 		return transform * inverseYaw;
 	}
 
@@ -454,9 +447,6 @@ void computeLocalNodeTransform(const tinygltf::Model& model,
 		// Reconstruct root transform without lateral movement and yaw rotation
 		nodeTransforms[rootJointIndex] = glm::translate(glm::mat4(1.0f), straightPosition) * 
 										glm::scale(glm::mat4(1.0f), scale);
-		
-		// OR alternative: Remove yaw rotation but keep forward/backward movement
-		// nodeTransforms[rootJointIndex] = removeYawRotation(nodeTransforms[rootJointIndex]);
 		
 		int rootNodeIndex = skin.joints[0];
 		std::vector<glm::mat4> newGlobalTransforms(skin.joints.size(), glm::mat4(1.0f));
@@ -529,10 +519,6 @@ void computeLocalNodeTransform(const tinygltf::Model& model,
 			int target = bufferView.target;
 			
 			if (bufferView.target == 0) { 
-				// The bufferView with target == 0 in our model refers to 
-				// the skinning weights, for 25 joints, each 4x4 matrix (16 floats), totaling to 400 floats or 1600 bytes. 
-				// So it is considered safe to skip the warning.
-				//std::cout << "WARN: bufferView.target is zero" << std::endl;
 				continue;
 			}
 
@@ -546,8 +532,6 @@ void computeLocalNodeTransform(const tinygltf::Model& model,
 			vbos[i] = vbo;
 		}
 
-		// Each mesh can contain several primitives (or parts), each we need to 
-		// bind to an OpenGL vertex array object
 		for (size_t i = 0; i < mesh.primitives.size(); ++i) {
 
 			tinygltf::Primitive primitive = mesh.primitives[i];
@@ -584,7 +568,6 @@ void computeLocalNodeTransform(const tinygltf::Model& model,
 				}
 			}
 
-			// Record VAO for later use
 			PrimitiveObject primitiveObject;
 			primitiveObject.vao = vao;
 			primitiveObject.vbos = vbos;
