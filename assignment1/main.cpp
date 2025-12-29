@@ -125,6 +125,7 @@ float roundToNearest(float x, float y){
 }
 
 
+//Ai
 float normalizeAngle(float angle) {
     while (angle > M_PI) angle -= 2 * M_PI;
     while (angle <= -M_PI) angle += 2 * M_PI;
@@ -138,72 +139,12 @@ float angularDifference(float from, float to) {
 }
 
 
-
+//Ai
 glm::vec3 getCameraPosition(const glm::mat4& viewMatrix) {
     // Camera position is the inverse of the view matrix translation
     glm::mat4 invView = glm::inverse(viewMatrix);
     return glm::vec3(invView[3]);
 }
-// ====================
-// SIMPLE SHADER CREATION
-// ====================
-GLuint createSimpleShader() {
-    const char* vertexShaderSource = R"(
-        #version 330 core
-        layout(location = 0) in vec3 aPos;
-        uniform mat4 MVP;
-        void main() {
-            gl_Position = MVP * vec4(aPos, 1.0);
-        }
-    )";
-
-    const char* fragmentShaderSource = R"(
-        #version 330 core
-        out vec3 FragColor;
-        void main() {
-            FragColor = vec3(1.0, 0.5, 0.2); // Orange color
-        }
-    )";
-
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-    
-    GLint success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cout << "Simple Vertex shader compilation failed: " << infoLog << std::endl;
-    }
-
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cout << "Simple Fragment shader compilation failed: " << infoLog << std::endl;
-    }
-
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vertexShader);
-    glAttachShader(program, fragmentShader);
-    glLinkProgram(program);
-    
-    glGetProgramiv(program, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(program, 512, NULL, infoLog);
-        std::cout << "Simple Shader program linking failed: " << infoLog << std::endl;
-    }
-    
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    
-    return program;
-}
-
 
 static GLuint LoadSkyBoxTexture(const char *texture_file_path) {
     int w, h, channels;
@@ -248,6 +189,8 @@ void updateCameraPosition() {
     while (botYaw < 0) botYaw += 2 * 3.14159265359f;
 }
 
+
+//Ai assisted
 // Function to get camera view matrix for third-person view
 glm::mat4 getThirdPersonViewMatrix() {
     // Calculate camera position
@@ -255,9 +198,9 @@ glm::mat4 getThirdPersonViewMatrix() {
     float verticalDistance = cameraDistance * sin(glm::radians(cameraAngleY));
     
     // Position camera BEHIND the bot using bot's yaw
-    float cameraPosX = botPosition.x - horizontalDistance * sin(botYaw);  // Changed
+    float cameraPosX = botPosition.x - horizontalDistance * sin(botYaw);
     float cameraPosY = botPosition.y + cameraHeight + verticalDistance;
-    float cameraPosZ = botPosition.z - horizontalDistance * cos(botYaw);  // Changed
+    float cameraPosZ = botPosition.z - horizontalDistance * cos(botYaw); 
     
     glm::vec3 cameraPos(cameraPosX, cameraPosY, cameraPosZ);
     
@@ -502,6 +445,7 @@ struct InstancedFlowers {
     }
 };
 
+//Ai assisted
 struct MyBot {
 	// Shader variable IDs
 	GLuint mvpMatrixID;
